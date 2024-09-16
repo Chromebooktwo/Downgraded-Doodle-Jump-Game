@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Basic Doodle Jump HTML Game</title>
+  <title>Doodle Jump HTML Game</title>
   <meta charset="UTF-8">
   <style>
     html, body {
       height: 100%;
       margin: 0;
+      overflow: hidden;
     }
 
     body {
@@ -14,6 +15,7 @@
       align-items: center;
       justify-content: center;
       flex-direction: column;
+      font-family: Arial, sans-serif;
     }
 
     canvas {
@@ -29,22 +31,29 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
+      padding: 10px 20px;
+      font-size: 18px;
+      cursor: pointer;
     }
 
-    #killScreen {
+    #killScreen, #winnerScreen {
       display: none;
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      background-color: rgba(255, 255, 255, 0.8);
+      background-color: rgba(255, 255, 255, 0.9);
       padding: 20px;
       border: 2px solid black;
       text-align: center;
+      border-radius: 10px;
     }
 
-    #resetButton {
+    #resetButtonKill, #resetButtonWin {
       margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
     }
   </style>
 </head>
@@ -58,20 +67,99 @@
     <p>Your Score: <span id="playerScore"></span></p>
     <p>High Score: <span id="highScore"></span></p>
     <p>Enemies Killed: <span id="enemiesKilled"></span></p>
-    <button id="resetButton" onclick="resetGame()">Play Again</button>
+    <p>Cause of Death: <span id="deathCause"></span></p>
+    <p>Attempts: <span id="attemptsKill"></span></p>
+    <button id="resetButtonKill">Play Again</button>
+  </div>
+  <div id="winnerScreen">
+    <h2>Congratulations!</h2>
+    <p>Your Score: <span id="winnerScore"></span></p>
+    <p>High Score: <span id="winnerHighScore"></span></p>
+    <p>Enemies Killed: <span id="winnerEnemiesKilled"></span></p>
+    <p>Attempts: <span id="attemptsWin"></span></p>
+    <button id="resetButtonWin">Play Again</button>
   </div>
   <script>
+    // Customizable Parameters
+    const config = {
+      platform: {
+        width: 65,
+        height: 20,
+        color: 'green',
+        brokenColor: 'orange',
+        enabled: true,
+        brokenEnabled: true
+      },
+      doodle: {
+        width: 40,
+        height: 60,
+        color: 'yellow',
+        initialX: null,
+        initialY: null,
+        initialJumpVelocity: -8,
+        gravity: 0.33,
+        drag: 0.3,
+        bounceVelocity: -12.5,
+        enabled: true,
+        killable: true
+      },
+      enemy: {
+        width: 30,
+        height: 30,
+        color: 'red',
+        speed: 2,
+        enabled: true
+      },
+      movingPlatform: {
+        color: 'lightblue',
+        speed: 2,
+        enabled: true
+      },
+      projectile: {
+        width: 10,
+        height: 10,
+        color: 'blue',
+        speed: 5,
+        enabled: true,
+        canKillEnemies: true
+      },
+      score: {
+        fontSize: '20px',
+        fontColor: 'black',
+        jumpPoints: 1,
+        enemyKillPoints: 10
+      },
+      gameSettings: {
+        startingScore: 0,
+        startingHighScore: 0,
+        startingJumps: 0,
+        startingEnemiesKilled: 0,
+        maxScore: 100,
+        gameOverScreenEnabled: true,
+        winnerScreenEnabled: true
+      },
+      background: {
+        color: '#003366',
+        enabled: true
+      },
+      player: {
+        canDieToVoid: true,
+        canDieToEnemies: true,
+        canDieAtAll: true
+      }
+    };
+
     const canvas = document.getElementById('game');
     const context = canvas.getContext('2d');
 
-    const platformWidth = 65;
-    const platformHeight = 20;
+    const platformWidth = config.platform.width;
+    const platformHeight = config.platform.height;
     const platformStart = canvas.height - 50;
 
-    const gravity = 0.33;
-    const drag = 0.3;
-    const bounceVelocity = -12.5;
-    const initialJumpVelocity = -8;
+    const gravity = config.doodle.gravity;
+    const drag = config.doodle.drag;
+    const bounceVelocity = config.doodle.bounceVelocity;
+    const initialJumpVelocity = config.doodle.initialJumpVelocity;
 
     let minPlatformSpace = 15;
     let maxPlatformSpace = 20;
@@ -82,21 +170,21 @@
     }];
 
     const doodle = {
-      width: 40,
-      height: 60,
-      x: canvas.width / 2 - 20,
-      y: platformStart - 60,
+      width: config.doodle.width,
+      height: config.doodle.height,
+      x: config.doodle.initialX !== null ? config.doodle.initialX : canvas.width / 2 - config.doodle.width / 2,
+      y: config.doodle.initialY !== null ? config.doodle.initialY : canvas.height - config.doodle.height - platformHeight,
       dx: 0,
       dy: 0
     };
 
     class Enemy {
       constructor(x, y) {
-        this.width = 30;
-        this.height = 30;
+        this.width = config.enemy.width;
+        this.height = config.enemy.height;
         this.x = x;
         this.y = y;
-        this.dx = 2;
+        this.dx = config.enemy.speed;
       }
 
       update() {
@@ -107,7 +195,7 @@
       }
 
       draw() {
-        context.fillStyle = 'red';
+        context.fillStyle = config.enemy.color;
         context.fillRect(this.x, this.y, this.width, this.height);
       }
     }
@@ -123,7 +211,7 @@
       }
 
       draw() {
-        context.fillStyle = 'orange';
+        context.fillStyle = config.platform.brokenColor;
         context.fillRect(this.x, this.y, this.width, this.height);
         context.fillStyle = 'black';
         context.font = '16px Arial';
@@ -137,7 +225,7 @@
         this.y = y;
         this.width = platformWidth;
         this.height = platformHeight;
-        this.dx = 2; // Constant speed
+        this.dx = config.movingPlatform.speed;
         this.direction = 1;
       }
 
@@ -149,15 +237,15 @@
       }
 
       draw() {
-        context.fillStyle = 'lightblue';
+        context.fillStyle = config.movingPlatform.color;
         context.fillRect(this.x, this.y, this.width, this.height);
       }
     }
 
     class Projectile {
       constructor(x, y, dx, dy) {
-        this.width = 10;
-        this.height = 10;
+        this.width = config.projectile.width;
+        this.height = config.projectile.height;
         this.x = x;
         this.y = y;
         this.dx = dx;
@@ -170,7 +258,7 @@
       }
 
       draw() {
-        context.fillStyle = 'blue';
+        context.fillStyle = config.projectile.color;
         context.fillRect(this.x, this.y, this.width, this.height);
       }
     }
@@ -183,19 +271,27 @@
     let keydown = false;
     let prevDoodleY = doodle.y;
 
-    let score = 0;
-    let highScore = 0;
-    let highestPoint = doodle.y;
-    let enemiesKilled = 0; 
-    let jumps = 0; 
+    let score = config.gameSettings.startingScore;
+    let highScore = config.gameSettings.startingHighScore;
+    let enemiesKilled = config.gameSettings.startingEnemiesKilled;
+    let jumps = config.gameSettings.startingJumps;
+    let attempts = 1;
 
     let isGameOver = false;
+    let hasWon = false;
+    let deathCause = "";
+    let isWinnerButStillPlaying = false;
 
     function loop() {
       if (isGameOver) return;
 
       requestAnimationFrame(loop);
       context.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (config.background.enabled) {
+        context.fillStyle = config.background.color;
+        context.fillRect(0, 0, canvas.width, canvas.height);
+      }
 
       doodle.dy += gravity;
 
@@ -217,23 +313,26 @@
           const isNewMovingPlatform = Math.random() < 0.1;
           let newPlatform;
 
-          if (isNewMovingPlatform) {
+          if (isNewMovingPlatform && config.movingPlatform.enabled) {
             newPlatform = new MovingPlatform(random(25, canvas.width - 25 - platformWidth), platforms[platforms.length - 1].y - (platformHeight + random(minPlatformSpace, maxPlatformSpace)));
             movingPlatforms.push(newPlatform);
-          } else {
-            newPlatform = isBroken ? new BrokenPlatform(random(25, canvas.width - 25 - platformWidth), platforms[platforms.length - 1].y - (platformHeight + random(minPlatformSpace, maxPlatformSpace)))
-                                    : { x: random(25, canvas.width - 25 - platformWidth), y: platforms[platforms.length - 1].y - (platformHeight + random(minPlatformSpace, maxPlatformSpace)) };
+          } else if (config.platform.enabled) {
+            newPlatform = isBroken && config.platform.brokenEnabled ?
+              new BrokenPlatform(random(25, canvas.width - 25 - platformWidth), platforms[platforms.length - 1].y - (platformHeight + random(minPlatformSpace, maxPlatformSpace))) :
+              { x: random(25, canvas.width - 25 - platformWidth), y: platforms[platforms.length - 1].y - (platformHeight + random(minPlatformSpace, maxPlatformSpace)), width: platformWidth, height: platformHeight };
           }
 
-          platforms.push(newPlatform);
+          if (newPlatform) {
+            platforms.push(newPlatform);
 
-          if (!isBroken && !isNewMovingPlatform && Math.random() < 0.2) {
-            enemies.push(new Enemy(newPlatform.x + platformWidth / 2 - 15, newPlatform.y - 30));
+            if (config.enemy.enabled && !(newPlatform instanceof MovingPlatform) && Math.random() < 0.2) {
+              enemies.push(new Enemy(newPlatform.x + platformWidth / 2 - 15, newPlatform.y - 30));
+            }
+
+            minPlatformSpace += 0.5;
+            maxPlatformSpace += 0.5;
+            maxPlatformSpace = Math.min(maxPlatformSpace, canvas.height / 2);
           }
-
-          minPlatformSpace += 0.5;
-          maxPlatformSpace += 0.5;
-          maxPlatformSpace = Math.min(maxPlatformSpace, canvas.height / 2);
         }
       } else {
         doodle.y += doodle.dy;
@@ -266,8 +365,8 @@
       platforms.forEach(function(platform, index) {
         if (platform instanceof BrokenPlatform) {
           platform.draw();
-        } else {
-          context.fillStyle = 'green';
+        } else if (config.platform.enabled) {
+          context.fillStyle = config.platform.color;
           context.fillRect(platform.x, platform.y, platformWidth, platformHeight);
         }
 
@@ -290,80 +389,123 @@
           }
 
           jumps++;
-          score++;
+          if (!isWinnerButStillPlaying) {
+            score += config.score.jumpPoints;
+            if (config.gameSettings.maxScore !== null && score >= config.gameSettings.maxScore) {
+              score = config.gameSettings.maxScore;
+              hasWon = true;
+              if (config.gameSettings.winnerScreenEnabled) {
+                showWinnerScreen();
+              } else {
+                isWinnerButStillPlaying = true;
+              }
+            }
+          }
         }
       });
 
-      movingPlatforms.forEach(function(platform) {
-        platform.update();
-        platform.draw();
-        if (
-          doodle.dy < 0 &&
-          doodle.y + doodle.height >= platform.y &&
-          doodle.x < platform.x + platformWidth &&
-          doodle.x + doodle.width > platform.x &&
-          doodle.y < platform.y + platformHeight &&
-          doodle.y + doodle.height > platform.y
-        ) {
-          doodle.y = platform.y - doodle.height;
-          doodle.dy = bounceVelocity;
-
-          jumps++;
-          score++;
-        }
-      });
-
-      projectiles.forEach(function(projectile, index) {
-        projectile.update();
-        projectile.draw();
-
-        enemies.forEach(function(enemy, enemyIndex) {
+      if (config.movingPlatform.enabled) {
+        movingPlatforms.forEach(function(platform) {
+          platform.update();
+          platform.draw();
           if (
-            projectile.x < enemy.x + enemy.width &&
-            projectile.x + projectile.width > enemy.x &&
-            projectile.y < enemy.y + enemy.height &&
-            projectile.y + projectile.height > enemy.y
+            doodle.dy > 0 &&
+            prevDoodleY + doodle.height <= platform.y &&
+            doodle.x < platform.x + platformWidth &&
+            doodle.x + doodle.width > platform.x &&
+            doodle.y < platform.y + platformHeight &&
+            doodle.y + doodle.height > platform.y
           ) {
-            enemies.splice(enemyIndex, 1);
-            projectiles.splice(index, 1);
-            enemiesKilled++;
-            score += 10;
+            doodle.y = platform.y - doodle.height;
+            doodle.dy = bounceVelocity;
+
+            jumps++;
+            if (!isWinnerButStillPlaying) {
+              score += config.score.jumpPoints;
+              if (config.gameSettings.maxScore !== null && score >= config.gameSettings.maxScore) {
+                score = config.gameSettings.maxScore;
+                hasWon = true;
+                if (config.gameSettings.winnerScreenEnabled) {
+                  showWinnerScreen();
+                } else {
+                  isWinnerButStillPlaying = true;
+                }
+                }
+            }
           }
         });
-
-        if (projectile.y < 0 || projectile.y > canvas.height || projectile.x < 0 || projectile.x > canvas.width) {
-          projectiles.splice(index, 1);
-        }
-      });
-
-      enemies.forEach(function(enemy) {
-        enemy.update();
-        enemy.draw();
-        if (
-          doodle.x < enemy.x + enemy.width &&
-          doodle.x + doodle.width > enemy.x &&
-          doodle.y < enemy.y + enemy.height &&
-          doodle.y + doodle.height > enemy.y
-        ) {
-          endGame();
-        }
-      });
-
-      context.fillStyle = 'yellow';
-      context.fillRect(doodle.x, doodle.y, doodle.width, doodle.height);
-
-      if (doodle.y < highestPoint) {
-        highestPoint = doodle.y;
-        score = Math.floor((canvas.height - highestPoint) / 10) + jumps;
       }
 
+      if (config.projectile.enabled) {
+        projectiles.forEach(function(projectile, index) {
+          projectile.update();
+          projectile.draw();
+
+          if (config.projectile.canKillEnemies) {
+            enemies.forEach(function(enemy, enemyIndex) {
+              if (
+                projectile.x < enemy.x + enemy.width &&
+                projectile.x + projectile.width > enemy.x &&
+                projectile.y < enemy.y + enemy.height &&
+                projectile.y + projectile.height > enemy.y
+              ) {
+                enemies.splice(enemyIndex, 1);
+                projectiles.splice(index, 1);
+                enemiesKilled++;
+                if (!isWinnerButStillPlaying) {
+                  score += config.score.enemyKillPoints;
+                  if (config.gameSettings.maxScore !== null && score >= config.gameSettings.maxScore) {
+                    score = config.gameSettings.maxScore;
+                    hasWon = true;
+                    if (config.gameSettings.winnerScreenEnabled) {
+                      showWinnerScreen();
+                    } else {
+                      isWinnerButStillPlaying = true;
+                    }
+                  }
+                }
+              }
+            });
+          }
+
+          if (projectile.y < 0 || projectile.y > canvas.height || projectile.x < 0 || projectile.x > canvas.width) {
+            projectiles.splice(index, 1);
+          }
+        });
+      }
+
+      if (config.enemy.enabled) {
+        enemies.forEach(function(enemy) {
+          enemy.update();
+          enemy.draw();
+          if (
+            doodle.x < enemy.x + enemy.width &&
+            doodle.x + doodle.width > enemy.x &&
+            doodle.y < enemy.y + enemy.height &&
+            doodle.y + doodle.height > enemy.y
+          ) {
+            if (config.player.canDieToEnemies && config.doodle.killable) {
+              deathCause = "Collision with enemy";
+              endGame();
+            }
+          }
+        });
+      }
+
+      if (config.doodle.enabled) {
+        context.fillStyle = config.doodle.color;
+        context.fillRect(doodle.x, doodle.y, doodle.width, doodle.height);
+      }
+
+      // Update high score
       highScore = Math.max(highScore, score);
 
-      context.fillStyle = 'black';
-      context.font = '20px Arial';
+      context.fillStyle = config.score.fontColor;
+      context.font = config.score.fontSize + ' Arial';
       context.fillText('Score: ' + score, 10, 30);
       context.fillText('High Score: ' + highScore, 10, 60);
       context.fillText('Enemies Killed: ' + enemiesKilled, 10, 90);
+      context.fillText('Attempts: ' + attempts, 10, 120);
 
       prevDoodleY = doodle.y;
 
@@ -371,16 +513,25 @@
         return platform.y < canvas.height;
       });
 
-      enemies = enemies.filter(function(enemy) {
-        return enemy.y < canvas.height;
-      });
+      if (config.enemy.enabled) {
+        enemies = enemies.filter(function(enemy) {
+          return enemy.y < canvas.height;
+        });
+      }
 
-      movingPlatforms = movingPlatforms.filter(function(platform) {
-        return platform.y < canvas.height;
-      });
+      if (config.movingPlatform.enabled) {
+        movingPlatforms = movingPlatforms.filter(function(platform) {
+          return platform.y < canvas.height;
+        });
+      }
 
       if (doodle.y > canvas.height) {
-        endGame();
+        if (config.player.canDieToVoid && config.doodle.killable) {
+          deathCause = "Fell into the void";
+          endGame();
+        } else {
+          doodle.y = canvas.height;
+        }
       }
     }
 
@@ -393,7 +544,7 @@
         keydown = true;
         playerDir = 1;
         doodle.dx = 3;
-      } else if (e.which === 32) {
+      } else if (e.which === 32 && config.projectile.enabled) {
         shootProjectile();
       }
     });
@@ -403,9 +554,11 @@
     });
 
     document.getElementById('startButton').addEventListener('click', startGame);
+    document.getElementById('resetButtonKill').addEventListener('click', function() { resetGame(true); });
+    document.getElementById('resetButtonWin').addEventListener('click', function() { resetGame(true); });
 
     function startGame() {
-      resetGame();
+      resetGame(false);
       document.getElementById('startButton').style.display = 'none';
     }
 
@@ -414,39 +567,71 @@
     }
 
     function shootProjectile() {
-      const projectile = new Projectile(doodle.x + doodle.width / 2 - 5, doodle.y, 0, -5);
-      projectiles.push(projectile);
+      if (config.projectile.enabled) {
+        const projectile = new Projectile(doodle.x + doodle.width / 2 - config.projectile.width / 2, doodle.y, 0, -config.projectile.speed);
+        projectiles.push(projectile);
+      }
+    }
+
+    function showWinnerScreen() {
+      if (!config.gameSettings.winnerScreenEnabled) {
+        isWinnerButStillPlaying = true;
+        return;
+      }
+      isGameOver = true;
+      updateHighScore();
+      document.getElementById('winnerScore').textContent = score;
+      document.getElementById('winnerHighScore').textContent = highScore;
+      document.getElementById('winnerEnemiesKilled').textContent = enemiesKilled;
+      document.getElementById('attemptsWin').textContent = attempts;
+      document.getElementById('winnerScreen').style.display = 'block';
     }
 
     function endGame() {
+      if (!config.player.canDieAtAll || !config.gameSettings.gameOverScreenEnabled) return;
+
       isGameOver = true;
+      updateHighScore();
       document.getElementById('playerScore').textContent = score;
       document.getElementById('highScore').textContent = highScore;
       document.getElementById('enemiesKilled').textContent = enemiesKilled;
+      document.getElementById('deathCause').textContent = deathCause;
+      document.getElementById('attemptsKill').textContent = attempts;
       document.getElementById('killScreen').style.display = 'block';
     }
 
-    function resetGame() {
+    function updateHighScore() {
+      highScore = Math.max(highScore, score);
+    }
+
+    function resetGame(incrementAttempts = true) {
       platforms = [{
         x: canvas.width / 2 - platformWidth / 2,
         y: platformStart
       }];
-      doodle.x = platforms[0].x + platformWidth / 2 - doodle.width / 2;
-      doodle.y = platforms[0].y - doodle.height;
+      doodle.x = config.doodle.initialX !== null ? config.doodle.initialX : canvas.width / 2 - config.doodle.width / 2;
+      doodle.y = config.doodle.initialY !== null ? config.doodle.initialY : canvas.height - config.doodle.height - platformHeight;
       doodle.dy = initialJumpVelocity;
       doodle.dx = 0;
-      score = 0;
-      jumps = 0;
-      highestPoint = doodle.y;
+      score = config.gameSettings.startingScore;
+      jumps = config.gameSettings.startingJumps;
       minPlatformSpace = 15;
       maxPlatformSpace = 20;
       enemies = [];
       movingPlatforms = [];
       projectiles = [];
-      enemiesKilled = 0;
+      enemiesKilled = config.gameSettings.startingEnemiesKilled;
       isGameOver = false;
+      hasWon = false;
+      isWinnerButStillPlaying = false;
+      deathCause = "";
+      if (incrementAttempts) {
+        attempts++;
+      }
+      updateHighScore();
       requestAnimationFrame(loop);
       document.getElementById('killScreen').style.display = 'none';
+      document.getElementById('winnerScreen').style.display = 'none';
     }
   </script>
 </body>
